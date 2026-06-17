@@ -15,7 +15,7 @@
 ## 项目结构
 
 ```
-chefly/                          # 目录名暂保留，详见底部「关于目录名」
+xiaochu/
 ├── apps/
 │   ├── chat/                # 统一聊天入口
 │   │   ├── routes.py        # POST /chat
@@ -98,7 +98,7 @@ chefly/                          # 目录名暂保留，详见底部「关于目
 项目已绑定 pyenv 虚拟环境（Python 3.12.13），进入项目目录自动激活。
 
 ```bash
-cd /var/www/chefly
+cd /var/www/xiaochu
 pip install -r requirements.txt
 cp .env.example .env
 # 编辑 .env，填入真实 OPENAI_API_KEY / OPENAI_BASE_URL / XIAOCHU_MODEL
@@ -240,23 +240,3 @@ python -m pytest
 ```
 
 详见 [docs/TESTING.md](docs/TESTING.md)。
-
-## 关于目录名 / pyenv 虚拟环境
-
-项目品牌从 `Chefly` 更名为 `小厨 / Xiaochu` 后，**代码、配置、文档已全部同步**，但以下两项暂时保留旧名（改动牵涉系统配置，需独立维护窗口处理）：
-
-- 工作目录仍为 `/var/www/chefly`
-- pyenv 虚拟环境名仍为 `chefly`
-
-未来若要彻底改名：
-
-```bash
-# 1. 重建 pyenv 虚拟环境
-pyenv virtualenv 3.12.13 xiaochu
-cd /var/www/chefly && pyenv local xiaochu
-pip install -r requirements.txt -r requirements-dev.txt
-
-# 2. 改目录（停服后）
-sudo mv /var/www/chefly /var/www/xiaochu
-# 同步更新 nginx / systemd / 启动脚本里的路径
-```

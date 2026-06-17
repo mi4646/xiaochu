@@ -6,12 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 小厨（Xiaochu）是做菜领域的 **多意图 AI 助手**：用户自由文本输入 → 意图识别 → 分发到对应 handler。**不引入 LangChain / LangGraph 等 agent 框架**，纯 Python + OpenAI SDK 实现。
 
-> 历史名 `Chefly` 已弃用。代码、配置、prompt、日志全部用 `小厨 / Xiaochu / xiaochu_*`。**唯独工作目录 `/var/www/chefly` 与 pyenv 虚拟环境名 `chefly` 暂未改**（涉及 nginx/systemd/pyenv 重建，单独维护窗口处理）。
-
 ## 常用命令
 
 ```bash
-# 运行（pyenv 虚拟环境暂仍叫 chefly，进入目录自动激活，Python 3.12.13）
+# 运行（pyenv 虚拟环境，进入目录自动激活，Python 3.12.13）
 python main.py                       # 启动 FastAPI（默认 127.0.0.1:8000）
 python cli.py                        # 进入多轮交互式 CLI
 python cli.py 宫保鸡丁                # CLI 单次模式
