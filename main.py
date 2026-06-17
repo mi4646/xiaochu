@@ -1,15 +1,31 @@
 """FastAPI 应用入口。"""
+from contextlib import asynccontextmanager
+
 import uvicorn
 from fastapi import FastAPI
 
 from apps.chat.routes import router as chat_router
 from core.config import get_settings
 from core.logging import get_logger, setup_logging
+from core.storage import init_db
 
 setup_logging()
 logger = get_logger(__name__)
 
-app = FastAPI(title="小厨 Xiaochu", description="做菜领域的 AI 助手", version="0.2.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """启动时初始化 SQLite 表（幂等）。"""
+    init_db()
+    yield
+
+
+app = FastAPI(
+    title="小厨 Xiaochu",
+    description="做菜领域的 AI 助手",
+    version="0.2.0",
+    lifespan=lifespan,
+)
 app.include_router(chat_router)
 
 

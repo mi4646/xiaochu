@@ -26,3 +26,9 @@ env/
 # 日志（运行时生成，含敏感请求摘要，不入库）
 logs/
 *.log
+
+# SQLite（运行时生成的会话存储，含用户对话内容，不入库）
+*.db
+*.db-journal
+*.db-wal
+*.db-shm

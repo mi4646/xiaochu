@@ -1,35 +1,32 @@
-"""会话状态管理：内存 dict 起步，重启丢失。"""
+"""会话状态管理：SQLite 后端，存储字段见 core/storage.py。
+
+对外 API 与早期内存版保持一致（create/ensure/get/append），
+所以 routes/cli/handler 层零感知。
+"""
 import uuid
-from threading import Lock
+
+from core import storage
 
 
 class SessionStore:
-    """简单的线程安全内存会话存储。"""
-
-    def __init__(self) -> None:
-        self._data: dict[str, list[dict]] = {}
-        self._lock = Lock()
+    """SQLite 支撑的会话存储。SessionStore 本身无状态，方法直接转 storage。"""
 
     def create(self) -> str:
-        sid = uuid.uuid4().hex
-        with self._lock:
-            self._data[sid] = []
-        return sid
+        """生成新 sid。不立即落库，等首次 append 时再插，避免空会话堆积。"""
+        return uuid.uuid4().hex
 
     def ensure(self, session_id: str | None) -> str:
-        """有则用，无则建。"""
-        if session_id and session_id in self._data:
+        """有 sid 则采纳（不强制 DB 里已存在），无 sid 才新建。"""
+        if session_id:
             return session_id
         return self.create()
 
     def get(self, session_id: str) -> list[dict]:
-        """返回历史消息列表副本。"""
-        with self._lock:
-            return list(self._data.get(session_id, []))
+        """返回历史消息列表。未知 sid 返回空 list。"""
+        return storage.get_messages(session_id)
 
     def append(self, session_id: str, role: str, content: str) -> None:
-        with self._lock:
-            self._data.setdefault(session_id, []).append({"role": role, "content": content})
+        storage.append_message(session_id, role, content)
 
 
 _store = SessionStore()

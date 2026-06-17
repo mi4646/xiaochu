@@ -66,3 +66,17 @@ def test_dispatch_chitchat(mock_chat):
     mock_chat.set_response("你好陛下，想吃啥？")
     out = dispatch(Intent.CHITCHAT, "你好", history=[])
     assert "陛下" in out["answer"]
+
+
+def test_dispatch_recipe_passes_history_to_handler(mock_chat):
+    """recipe handler 应能看到 history，让"调淡一点"这类引用落到上轮的菜上。"""
+    mock_chat.set_response(json.dumps([_fake_recipe("宫保鸡丁")]))
+    history = [
+        {"role": "user", "content": "宫保鸡丁"},
+        {"role": "assistant", "content": "为你生成了食谱：《宫保鸡丁》，主料 鸡胸肉、花生。"},
+    ]
+    dispatch(Intent.RECIPE, "调淡一点", history=history)
+    sent = mock_chat.calls[0]["messages"]
+    # 至少应包含 system + 上轮 user + 上轮 assistant + 本轮 user
+    assert any(m["role"] == "assistant" and "宫保鸡丁" in m["content"] for m in sent)
+    assert sent[-1] == {"role": "user", "content": "调淡一点"}

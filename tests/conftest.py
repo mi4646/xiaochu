@@ -66,9 +66,16 @@ def mock_chat(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def _clean_session_store():
-    """每个测试用例独立的会话存储，避免互相污染。"""
+def _clean_session_store(tmp_path, monkeypatch):
+    """每个测试用例独立的 SQLite 文件，避免互相污染。"""
     from apps.chat import session
+    from core import storage
+    from core.config import get_settings
+
+    db_file = tmp_path / "xiaochu-test.db"
+    settings = get_settings()
+    monkeypatch.setattr(settings, "xiaochu_db_path", str(db_file))
+    storage.init_db()
 
     original = session._store
     session._store = session.SessionStore()

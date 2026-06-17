@@ -9,15 +9,13 @@ SYSTEM_PROMPT = """你是 小厨 的食材反查模块。
 只输出菜名，每行一道，不要解释。"""
 
 
-def handle(user_input: str) -> dict:
-    logger.info("食材反查 开始 input=%r", user_input[:80])
-    raw = chat(
-        [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_input},
-        ],
-        max_tokens=200,
-    )
+def handle(user_input: str, history: list[dict] | None = None) -> dict:
+    logger.info("食材反查 开始 input=%r history_len=%d", user_input[:80], len(history or []))
+    messages: list[dict] = [{"role": "system", "content": SYSTEM_PROMPT}]
+    if history:
+        messages.extend(history[-2:])
+    messages.append({"role": "user", "content": user_input})
+    raw = chat(messages, max_tokens=200)
     dishes = [line.strip(" -•·.") for line in raw.splitlines() if line.strip()]
     logger.info("食材反查 完成 dishes=%d", len(dishes))
     return {"dishes": dishes, "note": "调用 /chat 并发送菜名可继续生成完整菜谱"}

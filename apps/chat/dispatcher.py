@@ -29,12 +29,12 @@ def dispatch(intent: Intent, user_input: str, history: list[dict]) -> Any:
     t0 = time.perf_counter()
     try:
         if intent == Intent.RECIPE:
-            recipes = recipe_handler.handle(user_input)
+            recipes = recipe_handler.handle(user_input, history=history)
             data = {"recipes": [r.model_dump() for r in recipes]}
         elif intent == Intent.RECOMMEND:
-            data = recommend_handler.handle(user_input)
+            data = recommend_handler.handle(user_input, history=history)
         elif intent == Intent.INGREDIENT:
-            data = ingredient_handler.handle(user_input)
+            data = ingredient_handler.handle(user_input, history=history)
         elif intent == Intent.COOKING_QA:
             data = qa_handler.handle(user_input, history=history)
         else:
@@ -49,22 +49,42 @@ def dispatch(intent: Intent, user_input: str, history: list[dict]) -> Any:
     return data
 
 
+def _recipe_brief(recipe: dict) -> str:
+    """从单道菜的 dict 抽出"菜名（主料）"片段，让下轮 LLM 能识别引用。
+
+    口味没有独立 schema 字段，用 tips 首条作为侧写（如"少放盐""偏甜"等）。
+    """
+    name = recipe.get("dish_name", "")
+    ingredients = recipe.get("ingredients") or []
+    mains = "、".join(i.get("name", "") for i in ingredients[:3] if i.get("name"))
+    tips = recipe.get("tips") or []
+    flavor = tips[0] if tips else ""
+    parts = [f"《{name}》"] if name else []
+    if mains:
+        parts.append(f"主料 {mains}")
+    if flavor:
+        parts.append(f"风味提示 {flavor}")
+    return "，".join(parts)
+
+
 def summarize(intent: Intent, data: dict) -> str:
     """把 data 转成自然语言摘要，写入 history 让多轮上下文连贯。"""
     if intent == Intent.RECIPE:
-        names = [r.get("dish_name", "") for r in data.get("recipes", [])]
-        if not names:
+        recipes = data.get("recipes", [])
+        if not recipes:
             return "（未生成菜谱）"
-        return f"为你生成了《{'》《'.join(names)}》的食谱。"
+        briefs = [_recipe_brief(r) for r in recipes]
+        return f"为你生成了食谱：{'；'.join(briefs)}。"
 
     if intent == Intent.RECOMMEND:
         dishes = data.get("dishes", [])
-        detailed = [r.get("dish_name", "") for r in data.get("recipes", []) if "dish_name" in r]
+        recipes = data.get("recipes", [])
+        detailed_briefs = [_recipe_brief(r) for r in recipes if "dish_name" in r]
         parts = []
         if dishes:
             parts.append(f"推荐了 {len(dishes)} 道菜：{'、'.join(dishes)}")
-        if detailed:
-            parts.append(f"已详细生成《{'》《'.join(detailed)}》的菜谱")
+        if detailed_briefs:
+            parts.append(f"已详细生成 {'；'.join(detailed_briefs)}")
         return "。".join(parts) + "。" if parts else "（未推荐菜品）"
 
     if intent == Intent.INGREDIENT:

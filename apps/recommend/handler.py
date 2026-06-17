@@ -50,16 +50,18 @@ def _parse_json(text: str) -> dict:
     return json.loads(text)
 
 
-def handle(user_input: str) -> dict:
-    """推荐菜名 + 并发生成详细菜谱。"""
-    logger.info("菜品推荐 开始 input=%r", user_input[:80])
-    raw = chat(
-        [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_input},
-        ],
-        max_tokens=400,
-    )
+def handle(user_input: str, history: list[dict] | None = None) -> dict:
+    """推荐菜名 + 并发生成详细菜谱。
+
+    history 只用于推荐阶段（理解"再来三个清淡的"等引用）；
+    子菜谱生成是独立的菜名 → 食谱，不复用 history 以防主料串味。
+    """
+    logger.info("菜品推荐 开始 input=%r history_len=%d", user_input[:80], len(history or []))
+    messages: list[dict] = [{"role": "system", "content": SYSTEM_PROMPT}]
+    if history:
+        messages.extend(history[-2:])
+    messages.append({"role": "user", "content": user_input})
+    raw = chat(messages, max_tokens=400)
     try:
         parsed = _parse_json(raw)
     except json.JSONDecodeError:

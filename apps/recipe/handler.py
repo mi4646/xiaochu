@@ -49,16 +49,18 @@ def _parse_json_array(text: str) -> list[dict]:
     return json.loads(text)
 
 
-def handle(user_input: str) -> list[RecipeResponse]:
-    """根据用户输入生成单/多道菜的食谱。"""
-    logger.info("食谱生成 开始 input=%r", user_input[:80])
-    raw = chat(
-        [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_input},
-        ],
-        max_tokens=4096,
-    )
+def handle(user_input: str, history: list[dict] | None = None) -> list[RecipeResponse]:
+    """根据用户输入生成单/多道菜的食谱。
+
+    history 只取最近 1 轮（user+assistant），让"调淡一点""换素菜版"等引用能落到正确的菜上；
+    塞太多会污染 JSON 输出格式，靠 _parse_json_array 容错也兜不住。
+    """
+    logger.info("食谱生成 开始 input=%r history_len=%d", user_input[:80], len(history or []))
+    messages: list[dict] = [{"role": "system", "content": SYSTEM_PROMPT}]
+    if history:
+        messages.extend(history[-2:])
+    messages.append({"role": "user", "content": user_input})
+    raw = chat(messages, max_tokens=4096)
     try:
         data = _parse_json_array(raw)
     except json.JSONDecodeError:

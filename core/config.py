@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     xiaochu_log_max_bytes: int = Field(default=5 * 1024 * 1024, description="单文件轮转大小（字节）")
     xiaochu_log_backup_count: int = Field(default=5, description="轮转保留份数")
 
+    # 会话存储：SQLite 文件路径（相对项目根或绝对路径）
+    xiaochu_db_path: str = Field(default="xiaochu.db", description="SQLite 数据库文件路径")
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

@@ -67,12 +67,14 @@ def test_chat_session_id_reused(mock_chat):
     assert any(m.get("content") == "怎么炒菜不糊" for m in sent)
 
 
-def test_chat_invalid_session_id_creates_new(mock_chat):
+def test_chat_unknown_session_id_is_respected(mock_chat):
+    """客户端传未知 sid 时，服务端应采纳而非偷换。"""
     mock_chat.set_responses(["chitchat", "你好"])
     client = TestClient(app)
-    r = client.post("/chat", json={"message": "嗨", "session_id": "nonexistent"})
+    sid = "708100861ce74915aa2514af984e572b"
+    r = client.post("/chat", json={"message": "嗨", "session_id": sid})
     assert r.status_code == 200
-    assert r.json()["session_id"] != "nonexistent"
+    assert r.json()["session_id"] == sid
 
 
 def test_chat_empty_message_rejected():

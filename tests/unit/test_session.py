@@ -12,14 +12,15 @@ def test_create_returns_unique_ids():
 def test_ensure_creates_when_unknown():
     s = SessionStore()
     sid = s.ensure(None)
-    assert sid in s._data
+    assert sid and len(sid) == 32
+    assert s.get(sid) == []
 
 
-def test_ensure_creates_when_id_not_in_store():
+def test_ensure_accepts_unknown_id_and_inits_empty_history():
     s = SessionStore()
-    sid = s.ensure("nonexistent")
-    assert sid != "nonexistent"
-    assert sid in s._data
+    sid = s.ensure("client-supplied-sid")
+    assert sid == "client-supplied-sid"
+    assert s.get(sid) == []
 
 
 def test_ensure_keeps_existing_id():
