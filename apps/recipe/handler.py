@@ -1,5 +1,6 @@
 """食谱处理器：支持单/多菜，由 LLM 自己识别拆分。"""
 import json
+import re
 
 from core.llm import chat
 from core.logging import get_logger
@@ -7,6 +8,9 @@ from core.logging import get_logger
 from .schemas import RecipeResponse
 
 logger = get_logger(__name__)
+
+# 用户输入里"我要这几道菜"的明确分隔信号
+_DISH_SEPARATORS_RE = re.compile(r"[+＋,，;；、/／]|和|跟|与|还有|以及")
 
 SYSTEM_PROMPT = """你是 小厨，专业中餐厨师 AI。
 用户输入可能是一道菜或多道菜（如"宫保鸡丁+木须肉"），你必须输出 JSON 数组，每个元素是一道菜的完整食谱。
@@ -69,3 +73,26 @@ def handle(user_input: str, history: list[dict] | None = None) -> list[RecipeRes
     recipes = [RecipeResponse.model_validate(item) for item in data]
     logger.info("食谱生成 完成 count=%d names=%s", len(recipes), [r.dish_name for r in recipes])
     return recipes
+
+
+def _user_dish_separators(text: str) -> bool:
+    """用户输入里是否含明确的多菜分隔符（+ / 和 跟 与 还有 等）。"""
+    return bool(_DISH_SEPARATORS_RE.search(text))
+
+
+def handle_with_meta(
+    user_input: str, history: list[dict] | None = None
+) -> tuple[list[RecipeResponse], bool]:
+    """同 handle()，多返回 ambiguous_multi 标记。
+
+    ambiguous_multi=True ⟺ LLM 输出 ≥2 道菜 但 用户输入里没有任何多菜分隔符。
+    供 CLI 在渲染前二次确认；HTTP 接口可忽略此标记。
+    """
+    recipes = handle(user_input, history=history)
+    ambiguous_multi = len(recipes) >= 2 and not _user_dish_separators(user_input)
+    if ambiguous_multi:
+        logger.info(
+            "食谱生成 多菜歧义 input=%r names=%s",
+            user_input[:80], [r.dish_name for r in recipes],
+        )
+    return recipes, ambiguous_multi

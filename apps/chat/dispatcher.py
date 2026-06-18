@@ -38,8 +38,11 @@ def dispatch(intent: Intent, user_input: str, history: list[dict]) -> Any:
     t0 = time.perf_counter()
     try:
         if intent == Intent.RECIPE:
-            recipes = recipe_handler.handle(user_input, history=history)
+            recipes, ambiguous_multi = recipe_handler.handle_with_meta(user_input, history=history)
             data = {"recipes": [r.model_dump() for r in recipes]}
+            if ambiguous_multi:
+                # 仅给 CLI 用的元字段，summarize 与 HTTP 客户端会忽略
+                data["_ambiguous_multi"] = True
         elif intent == Intent.RECOMMEND:
             data = recommend_handler.handle(user_input, history=history)
         elif intent == Intent.INGREDIENT:
