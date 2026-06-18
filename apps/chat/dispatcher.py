@@ -1,5 +1,6 @@
 """按 intent 分发到对应 handler，并提供历史摘要。"""
 import time
+from collections.abc import Iterator
 from typing import Any
 
 from apps.ingredient import handler as ingredient_handler
@@ -14,13 +15,21 @@ from .intents import Intent
 logger = get_logger(__name__)
 
 
-def _chitchat(user_input: str, history: list[dict] | None = None) -> dict:
-    """兜底闲聊：保持 小厨 人设。"""
+def _chitchat_messages(user_input: str, history: list[dict] | None) -> list[dict]:
     messages = [{"role": "system", "content": "你是 小厨，做菜领域的 AI 助手。简洁友好回应用户的闲聊或不相关提问，并自然引导回做菜话题。"}]
     if history:
         messages.extend(history[-4:])
     messages.append({"role": "user", "content": user_input})
-    return {"answer": chat(messages, max_tokens=300)}
+    return messages
+
+
+def _chitchat(user_input: str, history: list[dict] | None = None) -> dict:
+    """兜底闲聊：保持 小厨 人设。"""
+    return {"answer": chat(_chitchat_messages(user_input, history), max_tokens=300)}
+
+
+def _chitchat_stream(user_input: str, history: list[dict] | None = None) -> Iterator[str]:
+    return chat(_chitchat_messages(user_input, history), max_tokens=300, stream=True)
 
 
 def dispatch(intent: Intent, user_input: str, history: list[dict]) -> Any:
@@ -47,6 +56,19 @@ def dispatch(intent: Intent, user_input: str, history: list[dict]) -> Any:
     elapsed_ms = (time.perf_counter() - t0) * 1000
     logger.info("分发 完成 intent=%s elapsed_ms=%.0f", intent.value, elapsed_ms)
     return data
+
+
+def dispatch_stream(intent: Intent, user_input: str, history: list[dict]) -> Iterator[str] | None:
+    """流式分发：仅 COOKING_QA / CHITCHAT 返回字符串增量生成器，其他 intent 返回 None。
+
+    JSON 类 intent（RECIPE/RECOMMEND/INGREDIENT）必须等完整结果做 Pydantic 校验，
+    无法逐字流式，调用方应回退到同步 dispatch。
+    """
+    if intent == Intent.COOKING_QA:
+        return qa_handler.handle_stream(user_input, history=history)
+    if intent == Intent.CHITCHAT:
+        return _chitchat_stream(user_input, history=history)
+    return None
 
 
 def _recipe_brief(recipe: dict) -> str:

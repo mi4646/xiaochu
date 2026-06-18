@@ -16,7 +16,7 @@ from rich.panel import Panel
 from rich.prompt import Prompt
 from rich.table import Table
 
-from apps.chat.dispatcher import dispatch, summarize
+from apps.chat.dispatcher import dispatch, dispatch_stream, summarize
 from apps.chat.intents import Intent
 from apps.chat.router import classify_intent
 from apps.chat.session import get_store
@@ -108,6 +108,25 @@ def render(intent: Intent, data: dict) -> None:
         _render_answer(data, "💬 小厨")
 
 
+def _stream_answer(intent: Intent, message: str, history: list[dict]) -> str:
+    """流式打印自然语言回答，返回拼好的完整文本。
+
+    用 sys.stdout 直写并 flush，避免 rich.Console 在 end='' 模式下缓冲、
+    把流式 chunk 攒到末尾才一齐 dump。
+    """
+    title = "👨‍🍳 烹饪问答" if intent == Intent.COOKING_QA else "💬 小厨"
+    console.print()
+    console.print(f"[bold cyan]{title}[/bold cyan]")
+    parts: list[str] = []
+    for delta in dispatch_stream(intent, message, history):
+        parts.append(delta)
+        sys.stdout.write(delta)
+        sys.stdout.flush()
+    sys.stdout.write("\n\n")
+    sys.stdout.flush()
+    return "".join(parts).strip()
+
+
 def handle_message(message: str, session_id: str) -> None:
     """处理一条消息：识别意图 → 分发 → 渲染。"""
     store = get_store()
@@ -116,11 +135,18 @@ def handle_message(message: str, session_id: str) -> None:
     logger.info("CLI请求 开始 sid=%s history_len=%d msg=%r", session_id[:8], len(history), message[:80])
     with console.status("[bold cyan]小厨 思考中...", spinner="dots"):
         intent = classify_intent(message, history=history)
-        data = dispatch(intent, message, history=history)
-    logger.info("CLI请求 完成 sid=%s intent=%s", session_id[:8], intent.value)
 
     console.print(f"[dim]意图: {intent.value}[/dim]")
-    render(intent, data)
+
+    if intent in (Intent.COOKING_QA, Intent.CHITCHAT):
+        answer = _stream_answer(intent, message, history)
+        data = {"answer": answer}
+    else:
+        with console.status("[bold cyan]小厨 生成中...", spinner="dots"):
+            data = dispatch(intent, message, history=history)
+        render(intent, data)
+
+    logger.info("CLI请求 完成 sid=%s intent=%s", session_id[:8], intent.value)
 
     store.append(session_id, "user", message)
     store.append(session_id, "assistant", summarize(intent, data))
