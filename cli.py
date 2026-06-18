@@ -52,7 +52,7 @@ def _render_recipes(recipes: list[dict]) -> None:
         console.print(info)
         console.print()
 
-        console.print("[bold green]🥬 食材清单[/bold green]")
+        console.print("[bold green]食材清单[/bold green]")
         ing_t = Table(show_header=True, header_style="bold magenta")
         ing_t.add_column("食材", style="cyan")
         ing_t.add_column("分量", style="white")
@@ -61,12 +61,12 @@ def _render_recipes(recipes: list[dict]) -> None:
         console.print(ing_t)
         console.print()
 
-        console.print("[bold green]👨‍🍳 烹饪步骤[/bold green]")
+        console.print("[bold green]烹饪步骤[/bold green]")
         for step in r["steps"]:
             console.print(f"  [bold cyan]{step['order']}.[/bold cyan] {step['description']}")
         console.print()
 
-        console.print("[bold green]💡 烹饪小贴士[/bold green]")
+        console.print("[bold green]烹饪小贴士[/bold green]")
         for tip in r["tips"]:
             console.print(f"  • {tip}")
         console.print()
@@ -94,18 +94,18 @@ def render(intent: Intent, data: dict) -> None:
     if intent == Intent.RECIPE:
         _render_recipes(data.get("recipes", []))
     elif intent == Intent.RECOMMEND:
-        _render_dish_list(data.get("dishes", []), "🍽 推荐菜品", data.get("note"))
+        _render_dish_list(data.get("dishes", []), "推荐菜品", data.get("note"))
         recipes = data.get("recipes", [])
         if recipes:
             console.print()
             console.rule("[bold yellow]详细菜谱[/bold yellow]", style="yellow")
             _render_recipes(recipes)
     elif intent == Intent.INGREDIENT:
-        _render_dish_list(data.get("dishes", []), "🥕 可做的菜", data.get("note"))
+        _render_dish_list(data.get("dishes", []), "可做的菜", data.get("note"))
     elif intent == Intent.COOKING_QA:
-        _render_answer(data, "👨‍🍳 烹饪问答")
+        _render_answer(data, "烹饪问答")
     else:
-        _render_answer(data, "💬 小厨")
+        _render_answer(data, "小厨")
 
 
 def _stream_answer(intent: Intent, message: str, history: list[dict]) -> str:
@@ -114,7 +114,7 @@ def _stream_answer(intent: Intent, message: str, history: list[dict]) -> str:
     用 sys.stdout 直写并 flush，避免 rich.Console 在 end='' 模式下缓冲、
     把流式 chunk 攒到末尾才一齐 dump。
     """
-    title = "👨‍🍳 烹饪问答" if intent == Intent.COOKING_QA else "💬 小厨"
+    title = "烹饪问答" if intent == Intent.COOKING_QA else "小厨"
     console.print()
     console.print(f"[bold cyan]{title}[/bold cyan]")
     parts: list[str] = []
