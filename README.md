@@ -21,22 +21,26 @@ xiaochu/
 │   │   ├── routes.py        # POST /chat
 │   │   ├── intents.py       # Intent 枚举
 │   │   ├── router.py        # 意图识别（一次 LLM 调用）
-│   │   ├── dispatcher.py    # 按 intent 分发 + 历史摘要
-│   │   ├── session.py       # 内存会话存储
+│   │   ├── dispatcher.py    # 按 intent 分发 + 历史摘要 + 流式分支
+│   │   ├── session.py       # SessionStore（SQLite 持久化）
 │   │   └── schemas.py       # ChatRequest / ChatResponse
 │   ├── recipe/
-│   │   ├── handler.py       # 单/多菜食谱生成
+│   │   ├── handler.py       # 单/多菜食谱生成 + 多菜歧义检测
 │   │   └── schemas.py       # Pydantic 数据模型
 │   ├── recommend/handler.py # 推荐 + 并发生成菜谱
 │   ├── ingredient/handler.py# 食材反查
-│   └── qa/handler.py        # 烹饪问答
+│   └── qa/handler.py        # 烹饪问答（含流式版 handle_stream）
 ├── core/
-│   ├── config.py            # .env 配置
-│   └── llm.py               # 统一 OpenAI 兼容客户端
+│   ├── config.py            # .env 配置（pydantic-settings）
+│   ├── llm.py               # 统一 OpenAI 兼容客户端（同步 / 流式）
+│   ├── logging.py           # 文件日志 + 轮转
+│   └── storage.py           # SQLite 初始化与连接
 ├── main.py                  # FastAPI 入口
-├── cli.py                   # 命令行交互入口
+├── cli.py                   # 命令行交互入口（默认逐字流式 + 表格）
 ├── tests/
+├── pytest.ini
 ├── requirements.txt
+├── requirements-dev.txt
 ├── .env.example
 └── .python-version          # pyenv 虚拟环境绑定
 ```
@@ -81,6 +85,9 @@ xiaochu/
 | `XIAOCHU_LOG_TO_CONSOLE` | ❌ | `1` | 是否同时输出到控制台 |
 | `XIAOCHU_LOG_MAX_BYTES` | ❌ | `5242880` | 单文件轮转大小（字节）|
 | `XIAOCHU_LOG_BACKUP_COUNT` | ❌ | `5` | 轮转保留份数 |
+| `XIAOCHU_DB_PATH` | ❌ | `xiaochu.db` | SQLite 会话存储文件路径 |
+| `XIAOCHU_CLI_STREAM` | ❌ | `1` | CLI 是否启用逐字流式（设 `0` 等同 `--no-stream`）|
+| `XIAOCHU_CLI_CHAR_DELAY_MS` | ❌ | `20` | CLI 流式逐字节奏（毫秒/字）|
 
 <!-- /AUTO-GENERATED -->
 
@@ -109,13 +116,41 @@ cp .env.example .env
 ### CLI 交互（推荐）
 
 ```bash
-python cli.py                    # 进入多轮交互
+python cli.py                    # 进入多轮交互（默认逐字流式 + 表格）
 python cli.py 宫保鸡丁           # 单次请求
 python cli.py 今晚吃什么         # 自动识别为推荐 + 详细菜谱
 python cli.py 冰箱里有鸡蛋番茄   # 自动识别为食材反查
+python cli.py --no-stream 宫保鸡丁   # 关闭流式，立即一次性渲染
 ```
 
 输入 `:q` 或 Ctrl+C 退出。
+
+#### 流式输出
+
+CLI 默认开启逐字流式：
+- **JSON 类**（recipe / recommend / ingredient）：先生成完整结果，再把 rich 渲染（含 Panel/表格）的 ANSI 字符串逐字打印——视觉与 `--no-stream` 一致，只是字符依次出现。
+- **自然语言类**（cooking_qa / chitchat）：直接走真 token 流式，LLM 边出边打。
+
+控制方式（优先级从高到低）：
+1. CLI 参数 `--no-stream` / `--stream`
+2. 环境变量 `XIAOCHU_CLI_STREAM=0` 全局关闭
+3. `XIAOCHU_CLI_CHAR_DELAY_MS` 调整逐字节奏（默认 20，单位毫秒）
+
+#### 多菜歧义二次确认
+
+输入未含分隔符（如 `+`、`和`、`、`、`跟`、`与`）但 LLM 输出 ≥2 道菜时，CLI 会先打印理解结果并请求确认：
+
+```
+意图: recipe
+
+⚠ 我把「鸡丁肉丝」理解为这 2 道菜： 宫保鸡丁、鱼香肉丝
+继续渲染？ [y/n] (y):
+```
+
+- 回车 / `y`：继续渲染
+- `n`：取消，**不写入 history**，便于换种说法重输（如「鸡丁炒肉丝」）
+
+明确分隔（`鸡丁+肉丝`、`鸡丁和肉丝`）视为陛下主动多菜，**不触发确认**。HTTP 接口忽略此特性，仅 CLI 层启用。
 
 ### Web API
 
@@ -227,12 +262,13 @@ CLI 交互模式与 Web 接口都支持会话上下文：传 `session_id` 即可
 
 - **不引入 agent 框架**（LangChain / LangGraph 暂不需要）：纯 Python + OpenAI SDK 已足够
 - **意图分发**：先识别再处理，handler 职责单一
-- **会话存储**：起步用内存 dict，后续可换 SQLite/Redis
+- **会话存储**：SQLite 持久化（`XIAOCHU_DB_PATH`），重启后历史不丢
 - **历史摘要**：assistant 回复以自然语言进 history，让多轮上下文对 LLM 可读
+- **流式分层**：自然语言走真 token 流；JSON 类先生成后整体渲染再 ANSI 逐字打印，保住表格美观又不破坏 Pydantic 校验
 
 ## 测试
 
-64 个 pytest 用例，全 mock LLM，约 1 秒跑完。
+83 个 pytest 用例，全 mock LLM，约 1 秒跑完。
 
 ```bash
 pip install -r requirements-dev.txt
